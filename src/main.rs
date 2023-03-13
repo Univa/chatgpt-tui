@@ -1,5 +1,5 @@
 use cursive::reexports::enumset::enum_set;
-use cursive::theme::{Color, ColorStyle, Effect, PaletteColor, Style, Theme};
+use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, Effect, PaletteColor, Style, Theme};
 use cursive::utils::markup::StyledString;
 use cursive::view::{Nameable, Resizable, ScrollStrategy};
 use cursive::views::{Dialog, EditView, LinearLayout, Panel, ScrollView, TextView};
@@ -149,35 +149,31 @@ fn main() {
             //     .fixed_width(30),
             // )
             .child(
-                Panel::new(
-                    LinearLayout::vertical()
-                        .child(
-                            ScrollView::new(
-                                LinearLayout::vertical().with_name("messages_container"),
-                            )
+                LinearLayout::vertical()
+                    .child(Panel::new(
+                        ScrollView::new(LinearLayout::vertical().with_name("messages_container"))
                             .scroll_strategy(ScrollStrategy::StickToBottom)
                             .full_height(),
-                        )
-                        .child(Panel::new(
-                            EditView::new()
-                                .filler(" ")
-                                .on_submit(move |s, m| {
-                                    s.call_on_name("input_box", |view: &mut EditView| {
-                                        view.disable();
-                                        view.set_content("");
-                                    });
+                    ))
+                    .child(Panel::new(
+                        EditView::new()
+                            .filler(" ")
+                            .on_submit(move |s, m| {
+                                s.call_on_name("input_box", |view: &mut EditView| {
+                                    view.disable();
+                                    view.set_content("");
+                                });
 
-                                    let message = Message {
-                                        role: Role::User,
-                                        content: m.trim().to_owned(),
-                                    };
+                                let message = Message {
+                                    role: Role::User,
+                                    content: m.trim().to_owned(),
+                                };
 
-                                    user_msg_send.send(message).unwrap();
-                                })
-                                .with_name("input_box"),
-                        )),
-                )
-                .full_width(),
+                                user_msg_send.send(message).unwrap();
+                            })
+                            .with_name("input_box"),
+                    ))
+                    .full_width(),
             )
             .full_screen(),
     );
@@ -345,19 +341,29 @@ fn get_chatgpt_response(
 }
 
 fn format_message(m: &Message) -> StyledString {
-    let user = match m.role {
-        Role::User => "You",
-        Role::Assistant => "ChatGPT",
-        Role::System => "System",
+    let mut formatted_user = match m.role {
+        Role::User => StyledString::styled(
+            "You",
+            Style {
+                effects: enum_set!(Effect::Bold | Effect::Underline),
+                color: ColorStyle::new(BaseColor::Cyan, ColorType::InheritParent),
+            },
+        ),
+        Role::Assistant => StyledString::styled(
+            "ChatGPT",
+            Style {
+                effects: enum_set!(Effect::Bold | Effect::Underline),
+                color: ColorStyle::new(BaseColor::Magenta, ColorType::InheritParent),
+            },
+        ),
+        Role::System => StyledString::styled(
+            "System",
+            Style {
+                effects: enum_set!(Effect::Bold | Effect::Underline),
+                color: ColorStyle::new(BaseColor::Green, ColorType::InheritParent),
+            },
+        ),
     };
-
-    let mut formatted_user = StyledString::styled(
-        user,
-        Style {
-            effects: enum_set!(Effect::Bold | Effect::Underline),
-            color: ColorStyle::primary(),
-        },
-    );
 
     let formatted_contents = StyledString::from(m.content.trim());
 
