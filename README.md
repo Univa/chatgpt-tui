@@ -21,4 +21,5 @@ You can then call `chat` to run the application.
 ## To-do
 
 - [ ] Saving and continuing past conversations
+- [ ] Markdown parsing
 - [ ] Syntax highlighting for code fence blocks
