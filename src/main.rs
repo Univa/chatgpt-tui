@@ -87,18 +87,12 @@ fn main() {
     let (tick_send, tick_rcv) = channel::<i32>();
 
     let _tickhandler = thread::spawn(move || {
-        let mut counter = 1;
+        let mut counter = 0;
 
         loop {
             thread::sleep(Duration::from_secs(1));
-
-            if counter == 5 {
-                counter = 1;
-            }
-
+            counter = (counter % 4) + 1;
             tick_send.send(counter).unwrap();
-
-            counter += 1;
         }
     });
 
