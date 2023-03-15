@@ -1,14 +1,29 @@
+use comrak::nodes::AstNode;
+use comrak::nodes::NodeValue::{
+    BlockQuote, Code, CodeBlock, DescriptionDetails, DescriptionItem, DescriptionList,
+    DescriptionTerm, Document, Emph, FootnoteDefinition, FootnoteReference, FrontMatter, Heading,
+    HtmlBlock, HtmlInline, Image, Item, LineBreak, Link, List, Paragraph, SoftBreak, Strikethrough,
+    Strong, Superscript, Table, TableCell, TableRow, TaskItem, Text, ThematicBreak,
+};
+use comrak::{parse_document, Arena, ComrakOptions};
 use cursive::reexports::enumset::enum_set;
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, Effect, PaletteColor, Style, Theme};
-use cursive::utils::markup::StyledString;
+use cursive::utils::markup::{StyledIndexedSpan, StyledString};
+use cursive::utils::span::IndexedCow;
 use cursive::view::{Nameable, Resizable, ScrollStrategy};
 use cursive::views::{Dialog, EditView, LinearLayout, Panel, ScrollView, TextView};
 use cursive::Cursive;
+use cursive_syntect::translate_effects;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
 use std::time::Duration;
-use std::{env, thread};
+use std::{env, str, thread};
+use syntect::dumps::from_binary;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style as HighlightingStyle, Theme as HighlightingTheme, ThemeSet};
+use syntect::parsing::SyntaxSet;
+use syntect::Error;
 
 #[derive(Serialize, Deserialize, Clone)]
 enum Role {
@@ -132,7 +147,7 @@ fn main() {
     });
 
     // Use default terminal colors
-    let theme = theme(&siv);
+    let (theme, syntax_set, code_theme) = theme(&mut siv);
     siv.set_theme(theme);
 
     let mut runner = siv.try_into_runner().unwrap();
@@ -194,10 +209,14 @@ fn main() {
                             pending = true;
 
                             runner.call_on_name("messages_container", |view: &mut LinearLayout| {
-                                view.add_child(TextView::new(format_message(&Message {
-                                    role: Role::Assistant,
-                                    content: "".to_string(),
-                                })));
+                                view.add_child(TextView::new(format_message(
+                                    &syntax_set,
+                                    &code_theme,
+                                    &Message {
+                                        role: Role::Assistant,
+                                        content: "".to_string(),
+                                    },
+                                )));
                             });
                         }
                     };
@@ -223,7 +242,11 @@ fn main() {
 
                             // Add the message to the message container
                             runner.call_on_name("messages_container", |view: &mut LinearLayout| {
-                                view.add_child(TextView::new(format_message(&m)));
+                                view.add_child(TextView::new(format_message(
+                                    &syntax_set,
+                                    &code_theme,
+                                    &m,
+                                )));
                             });
                         }
                         Err(error) => {
@@ -259,10 +282,14 @@ fn main() {
                 // Add the message to the message container
                 runner.call_on_name("messages_container", |view: &mut LinearLayout| {
                     view.remove_child(view.len() - 1);
-                    view.add_child(TextView::new(format_message(&Message {
-                        role: Role::Assistant,
-                        content: String::from_utf8(vec![b'.'; m as usize]).unwrap(),
-                    })));
+                    view.add_child(TextView::new(format_message(
+                        &syntax_set,
+                        &code_theme,
+                        &Message {
+                            role: Role::Assistant,
+                            content: String::from_utf8(vec![b'.'; m as usize]).unwrap(),
+                        },
+                    )));
                 });
             }
         }
@@ -271,7 +298,7 @@ fn main() {
     }
 }
 
-fn theme(siv: &Cursive) -> Theme {
+fn theme(siv: &mut Cursive) -> (Theme, SyntaxSet, HighlightingTheme) {
     let mut theme = siv.current_theme().clone();
     theme.palette[PaletteColor::Background] = Color::TerminalDefault;
     theme.palette[PaletteColor::View] = Color::TerminalDefault;
@@ -284,7 +311,12 @@ fn theme(siv: &Cursive) -> Theme {
     theme.palette[PaletteColor::HighlightInactive] = Color::TerminalDefault;
     theme.palette[PaletteColor::HighlightText] = Color::TerminalDefault;
     theme.shadow = false;
-    theme
+
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let theme_set: ThemeSet = from_binary(include_bytes!("../assets/ansi.bin"));
+    let code_theme = theme_set.themes["ansi"].to_owned();
+
+    (theme, syntax_set, code_theme)
 }
 
 fn get_chatgpt_response(
@@ -340,7 +372,11 @@ fn get_chatgpt_response(
     }
 }
 
-fn format_message(m: &Message) -> StyledString {
+fn format_message(
+    syntax_set: &SyntaxSet,
+    theme: &syntect::highlighting::Theme,
+    m: &Message,
+) -> StyledString {
     let mut formatted_user = match m.role {
         Role::User => StyledString::styled(
             "You",
@@ -365,11 +401,192 @@ fn format_message(m: &Message) -> StyledString {
         ),
     };
 
-    let formatted_contents = StyledString::from(m.content.trim());
+    let arena = Arena::new();
+
+    let formatted_contents = match m.role {
+        Role::User => StyledString::from(m.content.trim()),
+        Role::Assistant => format_markdown(
+            syntax_set,
+            theme,
+            parse_document(&arena, m.content.trim(), &ComrakOptions::default()),
+        ),
+        Role::System => StyledString::from(m.content.trim()),
+    };
 
     formatted_user.append_plain(": ");
     formatted_user.append(formatted_contents);
     formatted_user.append("\n\n");
 
     formatted_user
+}
+
+fn format_markdown<'a>(
+    syntax_set: &SyntaxSet,
+    theme: &syntect::highlighting::Theme,
+    r: &'a AstNode<'a>,
+) -> StyledString {
+    let mut stack: Vec<(&AstNode, bool)> = vec![(r, true)];
+    let mut string = StyledString::new();
+
+    while let Some((node, entering)) = stack.pop() {
+        if entering {
+            stack.push((node, false));
+        }
+
+        match node.data.borrow().value {
+            Document => {}
+            FrontMatter(..) => {}
+            List(..) => {}
+            Item(..) => {}
+            BlockQuote => {}
+            DescriptionItem(..) => {}
+            DescriptionList => {}
+            Code(ref code_node) => {
+                if entering {
+                    string.append_plain('`');
+                    string.append(StyledString::styled(
+                        str::from_utf8(&code_node.literal).unwrap(),
+                        Style {
+                            effects: enum_set!(Effect::Bold),
+                            color: ColorStyle::terminal_default(),
+                        },
+                    ));
+                    string.append_plain('`');
+                }
+            }
+            CodeBlock(ref code_node) => {
+                if entering {
+                    // We assume that the first tag in the info string is the language
+                    let mut first_space_idx = 0;
+                    while first_space_idx < code_node.info.len()
+                        && !char::is_ascii_whitespace(&(code_node.info[first_space_idx] as char))
+                    {
+                        first_space_idx += 1;
+                    }
+
+                    let language = syntax_set
+                        .find_syntax_by_token(
+                            str::from_utf8(&code_node.info[..first_space_idx]).unwrap(),
+                        )
+                        .unwrap_or_else(|| {
+                            syntax_set
+                                .find_syntax_by_first_line(
+                                    str::from_utf8(&code_node.literal).unwrap().trim_start(),
+                                )
+                                .unwrap_or_else(|| syntax_set.find_syntax_plain_text())
+                        });
+
+                    let parsed_code = {
+                        let mut highlighter = HighlightLines::new(language, theme);
+                        let parsed_code = parse_code(
+                            str::from_utf8(&code_node.literal).unwrap(),
+                            &mut highlighter,
+                            syntax_set,
+                        );
+
+                        match parsed_code {
+                            Ok(code) => code,
+                            Err(_) => {
+                                StyledString::from(str::from_utf8(&code_node.literal).unwrap())
+                            }
+                        }
+                    };
+
+                    // Append another newline because the end of code blocks usually have a newline already
+                    string.append(parsed_code);
+                    string.append_plain('\n');
+                };
+            }
+            HtmlBlock(ref html_node) => {
+                // If ChatGPT for some reason tries to send HTML tags in their response without any code fences, we'll just render the literal string.
+                if entering {
+                    string.append_plain(str::from_utf8(&html_node.literal).unwrap());
+                    string.append_plain('\n');
+                }
+            }
+            HtmlInline(ref inline_html) => {
+                // See comment above
+                if entering {
+                    string.append_plain(str::from_utf8(inline_html).unwrap());
+                }
+            }
+            Paragraph => {
+                if !entering {
+                    // Append new lines only if there is nothing but the document node in the stack (i.e. we're at the end of the markdown text)
+                    if stack.len() > 1 {
+                        string.append_plain("\n\n");
+                    }
+                };
+            }
+            Text(ref text) => {
+                if entering {
+                    string.append_styled(
+                        String::from_utf8(text.to_owned()).unwrap(),
+                        Style::terminal_default(),
+                    );
+                }
+            }
+            DescriptionDetails => {}
+            ThematicBreak => {}
+            FootnoteDefinition(..) => {}
+            FootnoteReference(..) => {}
+            Heading(..) => {}
+            Table(..) => {}
+            TableRow(..) => {}
+            TableCell => {}
+            TaskItem { checked, symbol } => {}
+            DescriptionTerm => {}
+            SoftBreak => {}
+            LineBreak => {}
+            Emph => {}
+            Strong => {}
+            Strikethrough => {}
+            Superscript => {}
+            Link(..) => {}
+            Image(..) => {}
+        };
+
+        if entering {
+            for child in node.reverse_children() {
+                stack.push((child, true));
+            }
+        }
+    }
+
+    string
+}
+
+fn parse_code(
+    input: &str,
+    highlighter: &mut HighlightLines,
+    syntax_set: &SyntaxSet,
+) -> Result<StyledString, Error> {
+    let mut spans: Vec<StyledIndexedSpan> = vec![];
+
+    for line in input.split_inclusive('\n') {
+        for (style, text) in highlighter.highlight_line(line, syntax_set)? {
+            spans.push(StyledIndexedSpan {
+                content: IndexedCow::from_str(text, input),
+                attr: translate_style(style),
+                width: text.len(),
+            });
+        }
+    }
+
+    Ok(StyledString::with_spans(input, spans))
+}
+
+fn translate_style(style: HighlightingStyle) -> Style {
+    let foreground_color: Color = if style.foreground.a == 0 {
+        Color::Dark(BaseColor::from(style.foreground.r))
+    } else {
+        Color::TerminalDefault
+    };
+
+    let background_color = Color::TerminalDefault;
+
+    Style {
+        effects: translate_effects(style.font_style),
+        color: (foreground_color, background_color).into(),
+    }
 }

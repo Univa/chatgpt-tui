@@ -10,7 +10,7 @@ and ncurses (needed by [cursive](https://github.com/gyscos/cursive/wiki/Install-
 To install the binary, run (in this folder):
 
 ```
-cargo install --path .
+cargo install --bin chat --path .
 ```
 
 Before running the application, you must specify the `OPENAI_API_KEY` environment
@@ -21,5 +21,14 @@ You can then call `chat` to run the application.
 ## To-do
 
 - [ ] Saving and continuing past conversations
-- [ ] Markdown parsing
-- [ ] Syntax highlighting for code fence blocks
+- [ ] More customization (e.g. choosing models, or UI layout)
+- [ ] (More) Markdown rendering
+
+## Notes
+
+- Some markdown AST nodes are not being rendered, so if some responses don't
+  look correct, that may be why.
+- Sometimes ChatGPT may not include the language tag after code fences. This
+  can result in a lack of syntax highlighting for some repsonses containing
+  code.
+
