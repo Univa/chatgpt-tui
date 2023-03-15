@@ -4,6 +4,8 @@ https://user-images.githubusercontent.com/41708691/225441411-54a8cd81-4744-47b9-
 
 Basic terminal user interface for ChatGPT.
 
+https://user-images.githubusercontent.com/41708691/225441411-54a8cd81-4744-47b9-9db8-ce08a9b6a3ad.mp4
+
 ## Installation
 
 Before building, you may need the development packages/headers for OpenSSL (needed by [reqwest](https://github.com/seanmonstar/reqwest#requirements))
