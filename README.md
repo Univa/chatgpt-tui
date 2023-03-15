@@ -2,7 +2,7 @@
 
 Basic terminal user interface for ChatGPT.
 
-https://user-images.githubusercontent.com/41708691/225441411-54a8cd81-4744-47b9-9db8-ce08a9b6a3ad.mp4
+https://user-images.githubusercontent.com/41708691/225447685-251ad970-743d-4b5d-beaf-c9c29b812091.mp4
 
 ## Installation
 
