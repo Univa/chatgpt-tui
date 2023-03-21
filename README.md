@@ -23,6 +23,7 @@ You can then call `chat` to run the application.
 ## To-do
 
 - [ ] Saving and continuing past conversations
+- [ ] Stream responses from ChatGPT
 - [ ] More customization (e.g. choosing models, or UI layout)
 - [ ] (More) Markdown rendering
 
