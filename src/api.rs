@@ -55,7 +55,6 @@ pub fn get_chatgpt_response(
     let response = client
         .post("https://api.openai.com/v1/chat/completions")
         .bearer_auth(apikey)
-        .header("user-agent", "curl/7.87.0")
         .json(&body)
         .send();
 
