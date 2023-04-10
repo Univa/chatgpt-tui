@@ -6,8 +6,7 @@ https://user-images.githubusercontent.com/41708691/225447685-251ad970-743d-4b5d-
 
 ## Installation
 
-Before building, you may need the development packages/headers for OpenSSL (needed by [reqwest](https://github.com/seanmonstar/reqwest#requirements))
-and ncurses (needed by [cursive](https://github.com/gyscos/cursive/wiki/Install-ncurses#archlinux)).
+Before building, you may need the development packages/headers for ncurses (needed by [cursive](https://github.com/gyscos/cursive/wiki/Install-ncurses#archlinux)).
 
 To install the binary, run (in this folder):
 
