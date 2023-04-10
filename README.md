@@ -23,7 +23,6 @@ You can then call `chat` to run the application.
 ## To-do
 
 - [ ] Saving and continuing past conversations
-- [ ] Stream responses from ChatGPT
 - [ ] More customization (e.g. choosing models, or UI layout)
 - [ ] (More) Markdown rendering
 
@@ -34,4 +33,3 @@ You can then call `chat` to run the application.
 - Sometimes ChatGPT may not include the language tag after code fences. This
   can result in a lack of syntax highlighting for some repsonses containing
   code.
-

@@ -2,6 +2,7 @@ use cursive::theme::{Color, PaletteColor, Theme};
 use cursive::view::{Nameable, Resizable, ScrollStrategy};
 use cursive::views::{Dialog, EditView, LinearLayout, Panel, ScrollView, TextView};
 use cursive::Cursive;
+use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::channel;
 use std::time::Duration;
@@ -11,22 +12,17 @@ use syntect::highlighting::{Theme as HighlightingTheme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 
 mod api;
-use api::{get_chatgpt_response, Message, Role};
+use api::{stream_chatgpt_response, Message, Role};
 
 mod format;
 use format::format_message;
 
 #[derive(Serialize, Deserialize)]
-enum User {
-    You,
-    ChatGPT,
-}
-
-enum SystemMessage {
+pub enum SystemMessage {
     ResponsePending,
 }
 
-enum ProcessedMessage {
+pub enum ProcessedMessage {
     SystemMessage(SystemMessage),
     ChatMessage(Result<Message, String>),
 }
@@ -53,7 +49,7 @@ fn main() {
         _ => panic!("OPENAI_API_KEY is not set. Please set this environment variable to your OpenAI API Key.")
     };
 
-    let client = reqwest::blocking::Client::new();
+    let client = surf::Client::new();
     let mut messages: Vec<Message> = vec![];
 
     let (user_msg_send, user_msg_recv) = channel::<Message>();
@@ -74,7 +70,12 @@ fn main() {
                 ))
                 .unwrap();
 
-            let chatgpt_response = get_chatgpt_response(&client, &apikey, &messages).to_owned();
+            let chatgpt_response = block_on(stream_chatgpt_response(
+                &client,
+                &apikey,
+                &messages,
+                &processed_msg_send,
+            ));
 
             match chatgpt_response.to_owned() {
                 Ok(message) => {
@@ -84,10 +85,6 @@ fn main() {
                     messages.pop();
                 }
             }
-
-            processed_msg_send
-                .send(ProcessedMessage::ChatMessage(chatgpt_response))
-                .unwrap();
         }
     });
 
