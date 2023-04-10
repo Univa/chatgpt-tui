@@ -81,8 +81,11 @@ fn main() {
                 Ok(message) => {
                     messages.push(message);
                 }
-                Err(_) => {
+                Err(error) => {
                     messages.pop();
+                    processed_msg_send
+                        .send(ProcessedMessage::ChatMessage(Err(error)))
+                        .unwrap();
                 }
             }
         }
